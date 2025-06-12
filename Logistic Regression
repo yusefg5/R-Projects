@@ -26,8 +26,6 @@ y.fitted <- ifelse(prob.one>=0.5, 1, 0)
 y.fitted
 
 #Prediction accuracy in logistic regression
-#read Heart dataset
-heart <- read.csv('Heart.csv')
 
 #remove obs with missing value
 heart <- heart[complete.cases(heart), ]
