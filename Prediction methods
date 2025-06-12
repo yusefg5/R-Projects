@@ -1,0 +1,398 @@
+#Prediction
+#read fat dataset
+fat <- read.csv('fat.csv')
+
+#random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(fat)[1], 0.8 * dim(fat)[1])
+data.train <- fat[index.train,]
+data.test <- fat[-index.train,]
+
+#fit a linear model on the training set
+lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+               data=data.train)
+
+#predict on the test set
+yhat.test <- predict(lm.model, data.test)
+
+#calculate test MSE
+y.test <- data.test$brozek
+MSE.test <- mean((y.test - yhat.test)^2)
+MSE.test
+
+#root MSE
+RMSE.test <- sqrt(MSE.test)
+RMSE.test
+
+#normalized root MSE
+NRMSE.test <- RMSE.test / mean(y.test)
+NRMSE.test
+
+
+#k-fold Cross-validation
+#read fat dataset
+fat <- read.csv('fat.csv')
+set.seed(2022)
+
+#randomly shuffle the index
+index.random <- sample(1:dim(fat)[1])
+
+#split the data (index) into 5 folds 
+groups <- cut(1:252, 5, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+#an empty vector to save individual MSE
+MSEs <- c()
+
+#5-fold cross-validation
+for(index.test in index.fold){
+
+  #create training and test set
+  data.test <- fat[index.test,]
+  data.train <- fat[-index.test,]
+  
+  #fit a linear model on the training set
+  lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+                 data=data.train)
+  
+  #predict on the test set
+  yhat.test <- predict(lm.model, data.test)
+  
+  #calculate test MSE
+  y.test <- data.test$brozek
+  MSE.test <- mean((y.test - yhat.test)^2)
+  MSEs <- c(MSEs, MSE.test)
+}
+#plot 5 MSEs
+plot(1:5, MSEs, type='b', col='red', xlab='Fold', ylab='MSE', ylim=c(10,25))
+
+#Average 5 MSEs
+mean(MSEs)
+
+
+
+#Leave-one-out Cross-validation
+#read fat dataset
+set.seed(2022)
+
+#an empty vector to save individual MSE
+MSEs <- c()
+
+#LOOCV
+for(index.test in 1:dim(fat)[1]){
+  
+  #creat training and test set
+  data.test <- fat[index.test,]
+  data.train <- fat[-index.test,]
+  
+  #fit a linear model on the training set
+  lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+                 data=data.train)
+  
+  #predict on the test set
+  yhat.test <- predict(lm.model, data.test)
+  
+  #calculate test MSE
+  y.test <- data.test$brozek
+  MSE.test <- mean((y.test - yhat.test)^2)
+  MSEs <- c(MSEs, MSE.test)
+}
+#plot n MSEs
+plot(1:dim(fat)[1], MSEs, type='b', col='red', xlab='Fold', ylab='MSE')
+
+#Average MSEs
+mean(MSEs)
+
+
+#Bootstrap for empirical confidence interval
+
+#an empty vector to save bootstrap estimations
+weight.hat <- c()
+
+#resample 100 times
+set.seed(2022)
+for(i in 1:10000){
+  
+  #resample with replacement
+  index.boot <- sample(1:dim(fat)[1], size = dim(fat)[1], 
+                       replace = T)
+  data.boot <- fat[index.boot,]
+  
+  #fit linear model on bootstrap data
+  lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+                 data=data.boot)
+  
+  #save the bootstrap estimation for weight
+  weight.hat[i] <- lm.model$coefficients[2]
+}
+#distribution of weight
+hist(weight.hat)
+
+#standard deviation
+sd(weight.hat)
+
+#compare with theoretical result
+summary(lm(brozek ~ weight + abdom + forearm + wrist, data=fat))
+
+#95% confidence interval
+quantile(weight.hat, c(0.025, 0.975))
+
+#use the average of bootstrap estimation as point estimation
+mean(weight.hat)
+
+#compare with theoretical result
+summary(lm(brozek ~ weight + abdom + forearm + wrist, data=fat))
+
+
+#Bootstrap for empirical prediction confidence interval
+
+#randomly shuffle the index
+index.random <- sample(1:dim(fat)[1])
+
+#split the data (index) into 5 folds 
+groups <- cut(1:252, 5, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+#an empty matrix to save individual MSE
+#100 rows (bootstrap) * 5 columns (fold)
+MSEs <- matrix(NA, nrow=100, ncol=5)
+
+#5-fold cross-validation
+set.seed(2022)
+for(fold in 1:5){
+  index.test <- index.fold[[fold]]
+  # creat training and test set
+  data.test <- fat[index.test,]
+  data.train <- fat[-index.test,]
+  
+  #resample with replacement on training set
+  for(i in 1:100){
+    index.boot <- sample(1:dim(data.train)[1], 
+                         size = dim(data.train)[1], replace = T)
+    data.train.boot <- data.train[index.boot,]
+    
+    #fit a linear model on the training set
+    lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+                   data=data.train.boot)
+    
+    #predict on the test set
+    yhat.test <- predict(lm.model, data.test)
+    
+    #calculate test MSE
+    y.test <- data.test$brozek
+    MSE.test <- mean((y.test - yhat.test)^2)
+    MSEs[i, fold] <- MSE.test
+  }
+}
+
+#average 5 fold's MSE for each resample
+MSE.boot <- rowMeans(MSEs)
+
+#empirical distribution of boostrap MSE
+hist(MSE.boot)
+
+#95% confidence interval
+quantile(MSE.boot, c(0.025, 0.975))
+
+#Average as point estimation
+mean(MSE.boot)
+
+#permutation F test
+
+#orginal F test
+lm.model <- lm(brozek~., data = fat)
+summary(lm.model)
+
+#Original F statistic
+F.original <- summary(lm.model)$fstat[1]
+
+#set random seed to keep result same
+set.seed(123)
+
+#empty vector to save each permutation F statistic
+Fs <- c()
+
+#repeat by 1000 times
+for(i in 1:1000){
+  # linear regression on shuffled response
+  lm.model <- lm(sample(brozek)~., data = fat)
+  # save permutation F statistic
+  Fs[i] <- summary(lm.model)$fstat[1]
+}
+
+#Calculate the proportion of less than the original F statistics
+hist(Fs, breaks = 100)
+mean(Fs > F.original)
+
+
+#ridge regression
+library(glmnet)
+
+#read fat dataset
+fat <- read.csv('fat.csv')
+
+#random split the data into 80% training and 20% test
+set.seed(2023)
+index.train <- sample(1:dim(fat)[1], 0.8 * dim(fat)[1])
+data.train <- fat[index.train,]
+data.test <- fat[-index.train,]
+
+#fit a ridge regression with lambd=5 on the training set
+ridge.mod <- glmnet(data.train[,c('weight','abdom','forearm','wrist')], data.train$brozek, alpha = 0, lambda = 5)
+coef(ridge.mod)
+
+#compare parameter size with least square estimation
+lm.model <- lm(brozek ~ weight + abdom + forearm + wrist, 
+               data=data.train)
+lm.model
+
+#predict on the test set
+yhat.test <- predict(ridge.mod, as.matrix(data.test[,c('weight','abdom','forearm','wrist')]))
+
+#calculate test MSE
+y.test <- data.test$brozek
+MSE.test <- mean((y.test - yhat.test)^2)
+
+#root MSE
+RMSE.test <- sqrt(MSE.test)
+RMSE.test
+
+#normalized root MSE
+NRMSE.test <- RMSE.test / mean(y.test)
+NRMSE.test
+
+
+
+#ridge regression cross-validation for best lambda
+set.seed(2023)
+
+#randomly shuffle the index
+index.random <- sample(1:dim(fat)[1])
+
+#split the data (index) into 5 folds 
+groups <- cut(1:252, 5, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+#grid search
+grid <- seq(0, 1, by=0.01)
+
+#mse for each lambda
+MSE.grid.ridge <- c()
+
+for(lambda in grid){
+  
+  #an empty vector to save individual MSE
+  MSEs <- c()
+  
+  #5-fold cross-validation
+  for(index.test in index.fold){
+    
+    #create training and test set
+    data.test <- fat[index.test,]
+    data.train <- fat[-index.test,]
+    
+    #fit a ridge regression 
+    ridge.mod <- glmnet(data.train[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                      'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')], data.train$brozek, alpha = 0, lambda = lambda)
+    
+    #predict on the test set
+    yhat.test <- predict(ridge.mod, as.matrix(data.test[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                                           'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')]))
+    
+    #calculate test MSE
+    y.test <- data.test$brozek
+    MSE.test <- mean((y.test - yhat.test)^2)
+    MSEs <- c(MSEs, MSE.test)
+  }
+  MSE.grid.ridge <- c(MSE.grid.ridge, mean(MSEs))
+}
+
+plot(grid[1:10],MSE.grid.ridge[1:10], type='b', col='red', xlab='Lambda', ylab='MSE')
+
+
+#Lasso regression
+library(glmnet)
+
+#read fat dataset
+fat <- read.csv('fat.csv')
+
+#random split the data into 80% training and 20% test
+set.seed(2023)
+index.train <- sample(1:dim(fat)[1], 0.8 * dim(fat)[1])
+data.train <- fat[index.train,]
+data.test <- fat[-index.train,]
+
+#fit a lasso regression
+lasso.mod <- glmnet(data.train[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                  'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')], data.train$brozek, alpha = 1, lambda = 0.1)
+
+coef(lasso.mod)
+
+#predict on the test set
+yhat.test <- predict(ridge.mod, as.matrix(data.test[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                                       'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')]))
+
+#calculate test MSE
+y.test <- data.test$brozek
+MSE.test <- mean((y.test - yhat.test)^2)
+MSE.test
+
+#root MSE
+RMSE.test <- sqrt(MSE.test)
+RMSE.test
+
+#normalized root MSE
+NRMSE.test <- RMSE.test / mean(y.test)
+NRMSE.test
+
+
+
+#lasso regression cross-validation for best lambda
+set.seed(2023)
+
+#randomly shuffle the index
+index.random <- sample(1:dim(fat)[1])
+
+#split the data (index) into 5 folds 
+groups <- cut(1:252, 5, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+#grid search
+grid <- seq(0, 1, by=0.01)
+
+#mse for each lambda
+MSE.grid.lasso <- c()
+
+for(lambda in grid){
+  
+  #an empty vector to save individual MSE
+  MSEs <- c()
+  
+  #5-fold cross-validation
+  for(index.test in index.fold){
+    
+    #creat training and test set
+    data.test <- fat[index.test,]
+    data.train <- fat[-index.test,]
+    
+    #fit a ridge regression 
+    ridge.mod <- glmnet(data.train[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                      'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')], data.train$brozek, alpha = 1, lambda = lambda)
+    
+    #predict on the test set
+    yhat.test <- predict(ridge.mod, as.matrix(data.test[,c('age','weight','height','neck', 'chest' ,'abdom',
+                                                           'hip','thigh' ,'knee','ankle','biceps','forearm','wrist')]))
+    
+    #calculate test MSE
+    y.test <- data.test$brozek
+    MSE.test <- mean((y.test - yhat.test)^2)
+    MSEs <- c(MSEs, MSE.test)
+  }
+  MSE.grid.lasso <- c(MSE.grid.lasso, mean(MSEs))
+}
+
+plot(grid[1:10],MSE.grid[1:10], type='b', col='red', xlab='Lambda', ylab='MSE')
+
+#compare prediction accuracy between lasso and ridge
+min(MSE.grid.ridge)
+min(MSE.grid.lasso)
