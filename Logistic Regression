@@ -1,0 +1,280 @@
+#LOGISTIC REGRESSION
+#read Heart dataset
+heart <- read.csv('Heart.csv')
+
+#show variable type
+summary(heart)
+
+#remove obs with missing value
+heart <- heart[complete.cases(heart), ]
+
+#transform character response to 0 or 1
+heart$AHD <- ifelse(heart$AHD=="Yes", 1, 0)
+
+#fit a logistic regression
+logistic.model <- glm(AHD~., data=heart, family='binomial')
+
+#show model fitting result
+summary(logistic.model)
+
+#fitted P(Y=1)
+prob.one <- logistic.model$fitted.values
+prob.one
+
+#tranform probability to binary response
+y.fitted <- ifelse(prob.one>=0.5, 1, 0)
+y.fitted
+
+#Prediction accuracy in logistic regression
+#read Heart dataset
+heart <- read.csv('Heart.csv')
+
+#remove obs with missing value
+heart <- heart[complete.cases(heart), ]
+
+#transform character response to 0 or 1
+heart$AHD <- ifelse(heart$AHD=="Yes", 1, 0)
+
+#random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(heart)[1], 0.8 * dim(heart)[1])
+data.train <- heart[index.train,]
+data.test <- heart[-index.train,]
+
+#fit a logistic regression on training set
+logistic.model <- glm(AHD~., data=data.train, family='binomial')
+
+#predict on the test test, obtain the predicted P(Y=1)
+p.pred <- predict(logistic.model, data.test, type='response')
+
+#transform to binary response
+y.pred <- ifelse(p.pred>=0.5, 1, 0)
+
+#calculate classification accuracy
+y.truth <- data.test$AHD
+acc.test <- mean(y.pred==y.truth)
+acc.test
+
+#confusion matrix, true positive rate, true negative rate, precision
+#confusion matrix
+table(y.pred, y.truth)
+
+#true positive
+TP <- intersect(which(y.truth==1), which(y.pred==1))
+
+#true negative
+TN <- intersect(which(y.truth==0), which(y.pred==0))
+
+#false positive
+FP <- which(y.truth[which(y.pred==1)]==0)
+
+#false negative
+FN <- which(y.truth[which(y.pred==0)]==1)
+
+#true postive rate
+TPR <- length(TP) / (length(TP) + length(FN))
+TPR
+
+#true negative rate
+TNR <- length(TN) / (length(TN) + length(FP))
+TNR
+
+#precision
+prec <- length(TP) / (length(TP) + length(FP))
+prec
+
+#adjust threshold
+threshold <- seq(0, 1, 0.1)
+TPRs <- c()
+TNRs <- c()
+
+for(t in threshold){
+  y.pred <- ifelse(p.pred>=t, 1, 0)
+  TP <- intersect(which(y.truth==1), which(y.pred==1))
+  TN <- intersect(which(y.truth==0), which(y.pred==0))
+  FP <- which(y.truth[which(y.pred==1)]==0)
+  FN <- which(y.truth[which(y.pred==0)]==1)
+  TPR <- length(TP) / (length(TP) + length(FN))
+  TNR <- length(TN) / (length(TN) + length(FP))
+  TPRs <- c(TPRs, TPR)
+  TNRs <- c(TNRs, TNR)
+}
+TPRs
+TNRs
+
+
+#roc curve
+library(PRROC)
+plot(roc.curve(scores.class0 = p.pred[y.truth==1], 
+               scores.class1 = p.pred[y.truth==0], curve = TRUE),
+     ylab='True Postive Rate', xlab='False Negative Rate (1 - True Negative Rate)')
+
+
+#Multinomial Logistic regression
+#read Khan dataset
+data.list <- readRDS('Khan.rds')
+
+#first list element is the gene expression matrix
+gene <- data.list[[1]]
+dim(gene)
+
+#second list element is the tumor type
+type <- data.list[[2]]
+table(type)
+
+#we use PCA to obtain the first 10 PCs
+pr.out <- prcomp(gene , scale = TRUE)
+Z <- pr.out$x
+dim(Z)
+data <- Z[,1:10]
+dim(data)
+
+#tranform the data to a data frame
+data <- cbind(data, type)
+data <- data.frame(data)
+dim(data)
+summary(data)
+
+#use nnet package to conduct a multinomial logistic regression
+#install.packages('nnet')
+library(nnet)
+multinom_model <- multinom(type ~ ., data = data)
+
+#obtain the fitted probability for each class
+prob.fit <- multinom_model$fitted.values
+
+#for each observation, find the class corresponding to the largest probability
+type.fit <- apply(prob.fit, 1, which.max)
+table(type.fit)
+
+#accuracy (too optimistic)
+mean(type.fit==data$type)
+
+#5-fold cross vaidation
+set.seed(2022)
+
+#randomly shuffle the index
+index.random <- sample(1:dim(data)[1])
+
+#split the data (index) into 5 folds 
+groups <- cut(1:dim(data)[1], 5, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+#an empty vector to save predicted tumor type
+type.pred <- c()
+
+for(index.test in index.fold){
+  #creat training and test set
+  data.test <- data[index.test,]
+  data.train <- data[-index.test,]
+  
+  # fit a linear model on the training set
+  multinom_model <- multinom(type ~ ., data = data.train)
+  
+  # predict on the test set
+  pred <- predict(multinom_model, data.test, type = 'class')
+  
+  # save predicted tumor types
+  type.pred <- c(type.pred, pred)
+}
+
+#calculate prediction accuracy
+type.truth <- data$type[index.random]
+mean(type.pred == type.truth)
+
+#confusion matrix for classification with multiple classes
+table(type.pred, type.truth)
+
+
+#KNN classification
+#read Heart dataset
+heart <- read.csv('Heart.csv')
+
+#remove obs with missing value
+heart <- heart[complete.cases(heart), -c(3,13)]
+
+#transform character response to 0 or 1
+heart$AHD <- ifelse(heart$AHD=="Yes", 1, 0)
+
+#random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(heart)[1], 0.8 * dim(heart)[1])
+data.train <- heart[index.train,]
+data.test <- heart[-index.train,]
+
+library(class)
+yhat.test <- knn(
+  train = data.train[,-12], 
+  test = data.test[,-12],
+  cl = data.train$AHD, 
+  k=7
+)
+mean(data.test$AHD==yhat.test)
+table(data.test$AHD, yhat.test)
+
+
+#decision tree classification
+#read Heart dataset
+heart <- read.csv('Heart.csv')
+
+#remove obs with missing value
+heart <- heart[complete.cases(heart),]
+
+#transform character response to 0 or 1
+heart$AHD <- ifelse(heart$AHD=="Yes", 1, 0)
+heart$AHD <- factor(heart$AHD)
+heart$ChestPain <- factor(heart$ChestPain)
+heart$Thal <- factor(heart$Thal)
+
+#random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(heart)[1], 0.8 * dim(heart)[1])
+data.train <- heart[index.train,]
+data.test <- heart[-index.train,]
+
+tree.heart <- tree(AHD~., data=data.train)
+yhat.test <- predict(tree.heart , newdata = data.test, type='class')
+
+mean(data.test$AHD==yhat.test)
+table(data.test$AHD, yhat.test)
+
+
+#Bagging, Random Forest, Boosting
+library(randomForest)
+library(gbm)
+
+#read Heart dataset
+heart <- read.csv('Heart.csv')
+
+#remove obs with missing value
+heart <- heart[complete.cases(heart),]
+
+#transform character response to 0 or 1
+heart$AHD <- ifelse(heart$AHD=="Yes", 1, 0)
+heart$AHD <- factor(heart$AHD)
+heart$ChestPain <- factor(heart$ChestPain)
+heart$Thal <- factor(heart$Thal)
+
+#random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(heart)[1], 0.8 * dim(heart)[1])
+data.train <- heart[index.train,]
+data.test <- heart[-index.train,]
+
+#bagging
+bagging.heart <- randomForest(AHD~., mtry=13, ntree=500, importance = TRUE, data=data.train)
+
+#random forest
+rf.heart <- randomForest(AHD~., mtry=4, ntree=500, data=data.train)
+
+#boosting
+boost.heart <- gbm(as.character(AHD)~., n.trees=500, distribution = "bernoulli", data=data.train)
+
+yhat.test.bag <- predict(bagging.heart , newdata = data.test, type='class')
+yhat.test.rf <- predict(rf.heart , newdata = data.test, type='class')
+yhat.test.prob <- predict(boost.heart , newdata = data.test, type='response')
+yhat.test.boost <- ifelse(yhat.test.prob>0.5,1,0)
+
+mean(yhat.test.bag==data.test$AHD)
+mean(yhat.test.rf==data.test$AHD)
+mean(yhat.test.boost==data.test$AHD)
